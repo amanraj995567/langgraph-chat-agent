@@ -1,5 +1,5 @@
 import streamlit as st
-from langgraph_backend import chatbot
+from database_backend import chatbot, retrive_all_threads
 from langchain_core.messages import HumanMessage
 import uuid
 
@@ -23,22 +23,6 @@ def load_chat(thread_id):
     state = chatbot.get_state(config= {'configurable': {'thread_id': thread_id}})
     return state.values.get('messages', [])
 
-def make_title(text):
-    return text.strip().split("\n")[0][:40] or "Untitled chat"
-
-def thread_title(thread_id):
-    # Cached so we only walk the checkpointer once per thread.
-    if thread_id in st.session_state['thread_names']:
-        return st.session_state['thread_names'][thread_id]
-
-    for msg in load_chat(thread_id):
-        if isinstance(msg, HumanMessage):
-            title = make_title(msg.text)
-            st.session_state['thread_names'][thread_id] = title
-            return title
-
-    return "Untitled chat"
-
 
 
 
@@ -51,10 +35,7 @@ if 'thread_id' not in st.session_state:
     st.session_state['thread_id']=generate_thread_id()
 
 if 'chat_threads' not in st.session_state:
-    st.session_state['chat_threads']=[]
-
-if 'thread_names' not in st.session_state:
-    st.session_state['thread_names']={}
+    st.session_state['chat_threads']= retrive_all_threads()
 
 add_threads(st.session_state['thread_id'])
 
@@ -66,14 +47,9 @@ if st.sidebar.button("New Chat"):
 
 st.sidebar.header("Chat History")
 
-
-
-
-
-
 ###################loading the conversation history################
-for thread_id in reversed(st.session_state['chat_threads']):
-    if st.sidebar.button(thread_title(thread_id), key=thread_id, use_container_width=True):
+for thread_id in st.session_state['chat_threads']:
+    if st.sidebar.button(str(thread_id)):
         st.session_state['thread_id']=thread_id
         messages = load_chat(thread_id)
 
@@ -115,12 +91,6 @@ if user_input:
             )
         )
     st.session_state['message_history'].append({'role':'assistant',  'content': ai_message })
-
-    # First message in a fresh thread names it. The sidebar was already drawn
-    # above, so rerun to show the new label instead of "New Chat".
-    if st.session_state['thread_id'] not in st.session_state['thread_names']:
-        st.session_state['thread_names'][st.session_state['thread_id']] = make_title(user_input)
-        st.rerun()
 
 
 
