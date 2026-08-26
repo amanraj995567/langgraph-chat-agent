@@ -1,6 +1,6 @@
 import streamlit as st
-from database_backend import chatbot, retrive_all_threads
-from langchain_core.messages import HumanMessage
+from chatbot_backend_withTools import chatbot, retrive_all_threads
+from langchain_core.messages import HumanMessage, AIMessage
 import uuid
 
 
@@ -22,6 +22,16 @@ def  start_new_chat():
 def load_chat(thread_id):
     state = chatbot.get_state(config= {'configurable': {'thread_id': thread_id}})
     return state.values.get('messages', [])
+
+def stream_ai_response(user_input, config):
+    """Yield only the assistant's own text, skipping tool results."""
+    for message_chunk, metadata in chatbot.stream(
+        {'messages': [HumanMessage(content=user_input)]},
+        config=config,
+        stream_mode="messages"
+    ):
+        if isinstance(message_chunk, AIMessage) and message_chunk.text:
+            yield message_chunk.text
 
 
 
@@ -57,9 +67,13 @@ for thread_id in st.session_state['chat_threads']:
         for msg in messages:
             if isinstance(msg, HumanMessage):
                 role= "user"
-            else:
+            elif isinstance(msg, AIMessage):
                 role= "assistant"
-            temp_msg.append({"role": role, "content": msg.text})
+            else:
+                # ToolMessage etc. - internal, not part of the visible chat
+                continue
+            if msg.text:
+                temp_msg.append({"role": role, "content": msg.text})
 
         st.session_state['message_history']=temp_msg
 
@@ -88,13 +102,7 @@ if user_input:
 
 
     with st.chat_message('assistant'):
-        ai_message = st.write_stream(
-            str(message_chunk.text) for message_chunk, metadata in chatbot.stream(
-                {'messages': [HumanMessage(content=user_input)]},
-                config=CONFIG,
-                stream_mode="messages"
-            )
-        )
+        ai_message = st.write_stream(stream_ai_response(user_input, CONFIG))
     st.session_state['message_history'].append({'role':'assistant',  'content': ai_message })
 
 
